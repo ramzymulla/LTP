@@ -14,9 +14,8 @@ import scipy as sp
 import csv
 import pickle as pl
 from scipy import stats
-import matplotlib.pyplot as plt
 import matplotlib as mpl
-import matplotlib_ephys as mpe
+import matplotlib.pyplot as plt
 
 
 '''
@@ -49,8 +48,8 @@ class Raw:
     def __init__(self, ID: str,
                  filepath: str,
                  df: pd.DataFrame,
-                 forward: (int, int),
-                 reverse: (int, int),
+                 forward: tuple[int, int],
+                 reverse: tuple[int, int],
                  hemi = '',
                  stims = (None, None),
                  blind = False,
@@ -128,14 +127,14 @@ class Raw:
         Returns:
             {Self.ID}_df.pkl in
         '''
-        os.makedirs(f'Pickles\\{subfolder}', exist_ok=True)
-        path = f'Pickles\\{subfolder}\\{self.ID}'
-        if not os.path.exists(path):
-            self.df.to_pickle(f'Pickles\\{subfolder}\\{self.ID}')
+        os.makedirs(os.path.join(subfolder,'Pickles'), exist_ok=True)
+        path = os.path.join(subfolder,'Pickles',self.ID)
+        if not os.path.exists(path+"_df.pkl"):
+            self.df.to_pickle(path+"_df.pkl")
         else:
-            self.df.to_pickle(f'Pickles\\{subfolder}\\{self.ID}_{self.hemi}_df.pkl')
-
-    def generate_traces(self) -> []:
+            self.df.to_pickle(f'{path}_{self.hemi}_df.pkl')
+        
+    def generate_traces(self) -> list:
         '''
         This function generates a list of Trace objects from the raw dataframe's fw and rev channels
         Returns:
@@ -334,7 +333,7 @@ class Raw:
         return timeline, timeline2
 
     def display_traces(self,
-                       traces: [],
+                       traces: list,
                        autotrim=False,
                        measures=False,
                        overlay=False,
@@ -443,9 +442,9 @@ class Raw:
                         if slope_overlay:
                             trace.slope_overlay(d=False)
                         else:
-                            trace.show(False, measures=measures, color=color, label=label)
+                            trace.show(d=False, measures=measures, color=color, label=label)
                     else:
-                        trace.show(False, measures=measures, color=color)
+                        trace.show(d=False, measures=measures, color=color)
 
                     if autotrim:
                         if trace_nums[i] % 2 == 1:
@@ -458,7 +457,7 @@ class Raw:
             plt.suptitle(self.ID)
             plt.show()
 
-    def trace_summary(self, ch='fw', autotrim=False, all=False, fw=True):
+    def trace_summary(self, ch='fw', autotrim=True, all=False, fw=True):
         '''
         Displays the trace summary overlay for a given channel.
 
@@ -516,7 +515,7 @@ class Raw:
                 ind = 1 + i * 2
             else:
                 ind = 2 + i * 2
-            if self.timeline[tl][i] == 'baseline' or all:
+            if self.timeline[tl][i] == 'baseline':
                 bl.append(ind)
             elif self.timeline[tl][i] == 'TBS':
                 tet.append(ind)
@@ -636,7 +635,7 @@ class Trace:
     This is an object for storing each individual trace in an experiment. Each EarlyLTP measure (1040slope, EPSP
     amplitude, etc.) is automatically calculated for each trace upon initialization.
     '''
-    def __init__(self, arr: [], num: int, channel: int, ID: str, exp = True):
+    def __init__(self, arr: list, num: int, channel: int, ID: str, exp = True):
         self.data = [1000*i for i in arr]                                                 # raw data for this trace
         self.mouse = ID
         self.time = \
@@ -678,24 +677,25 @@ class Trace:
                f"rise time = {self.tf_rise_time}\n " \
                f"slope = {self.tf_slope}\n"
 
-    def find_peak(self) -> (float, int):
+    def find_peak(self) -> tuple:
         '''
         Extracts the post fiber volley peak
         Returns:
-             Tuple -> (magnitude of peak, index in self.data)
+             Tuple -> (magnitude of peak, index in self.data, baseline-adjusted magenitude)
         '''
         ind = int(SA + 0.2//ST)
         while self.data[ind+1] > self.data[ind] or self.data[ind] < self.data[ind-3]:
             ind += 1
         arr = self.data[ind:ind+100].copy()
         peak = np.max(arr) - self.baseline
+        
         return (peak, np.argmax(arr)+ind, peak+self.baseline)
 
     def find_thresh(self):
         arr = self.data[self.peak[1]:self.min[1]]
         return arr.index(min(arr, key=lambda x: abs(x - self.baseline))) + self.peak[1]
 
-    def find_fv(self) -> (float, int):
+    def find_fv(self) -> tuple:
         '''
         Extracts the fiber volley. According to MED64 product documentation, the stimulus artifact last 0.5 ms. Based
         on this fact, and knowing that stim always occurs at 5 ms in our dataset, can extract the fiber volley as the
@@ -706,17 +706,17 @@ class Trace:
         arr = self.data[SA:self.peak[1]].copy()
         return (np.min(arr)-self.peak[0]-self.baseline, np.argmin(arr)+SA)
 
-    def find_min(self) -> (float, int):
+    def find_min(self) -> tuple:
         '''
         Extracts the global minimum (not counting the artifact). Same logic as for the fiber volley.
         Returns:
-             Tuple -> (magnitude of global minimum, index in self.data)
+             Tuple -> (magnitude of global minimum, index in self.data, difference from self.peak)
         '''
         min = np.min(self.data[self.peak[1]:].copy())
         ind = np.argmin(self.data[self.peak[1]:].copy())
         return (min-self.baseline, ind+self.peak[1], min, min-self.peak[0])
 
-    def find_10_40(self) -> ((float, int), (float, int)):
+    def find_10_40(self) -> tuple[tuple[float, int, int], tuple[float, int, int]]:
         '''
         Calculates and returns the amplitudes at 10% and 40% of the time interval from peak to EPSP Minimum, along
         with their corresponding indices.
@@ -757,7 +757,7 @@ class Trace:
              autotrim = False,
              measures = False,
              slope = False,
-             color = '', label = '', paper=False):
+             color = BASELINEcolor, label = '', paper=False):
         '''
         Method for displaying the given trace. All args have default values which will result in displaying the
         entire trace. Use the arguments to delay use of plt.show(), and/or to only graph a specific time interval.
@@ -828,11 +828,11 @@ class Trace:
             plt.plot(time[min-8:min+11], data[min-8:min+11],
                      MINcolor, lw=3, label = "EPSP Minimum")
 
-            plt.scatter(time[fv], data[fv], s=40, c=FVcolor, marker=6)
-            plt.scatter(time[peak], data[peak], s=40, c=PEAKcolor, marker=7)
-            plt.scatter(time[min], data[min], s=40, c=MINcolor, marker = 6)
-            plt.scatter(time[ten], data[ten], s=40, c=SLOPEcolor, lw=3, marker=4)
-            plt.scatter(time[forty], data[forty], s=40, c=SLOPEcolor, marker=4)
+            plt.scatter(time[fv], data[fv], s=40, c=FVcolor, marker=6) # type: ignore
+            plt.scatter(time[peak], data[peak], s=40, c=PEAKcolor, marker=7) # type: ignore
+            plt.scatter(time[min], data[min], s=40, c=MINcolor, marker = 6) # type: ignore
+            plt.scatter(time[ten], data[ten], s=40, c=SLOPEcolor, lw=3, marker=4) # type: ignore
+            plt.scatter(time[forty], data[forty], s=40, c=SLOPEcolor, marker=4) # type: ignore
 
             plt.legend(loc='lower right')
 
@@ -851,17 +851,15 @@ class Trace:
             #          f"  10-40% Slope = {np.round(self.tf_slope, 3)}",
             #          ha='left')
             plt.plot(time[forty:t2], data[forty:t2], BASELINEcolor, lw=3)
-            plt.scatter(time[ten], data[ten], s=40, c=SLOPEcolor, lw=3, marker=4)
-            plt.scatter(time[forty], data[forty], s=40, c=SLOPEcolor, marker=4)
+            plt.scatter(time[ten], data[ten], s=40, c=SLOPEcolor, lw=3, marker=4) # type: ignore
+            plt.scatter(time[forty], data[forty], s=40, c=SLOPEcolor, marker=4) # type: ignore
             plt.legend(loc='lower right')
 
-        elif color != '':
-            if label != '':
-                plt.plot(time[t1:t2 + 1], data[t1:t2 + 1], c=color, label = label)
-            else:
-                plt.plot(time[t1:t2 + 1], data[t1:t2 + 1], c = color)
+        
+        if label != '':
+            plt.plot(time[t1:t2 + 1], data[t1:t2 + 1], c=color, label = label)
         else:
-            plt.plot(time[t1:t2+1], data[t1:t2+1], c=BASELINEcolor)                  # create pyplot object
+            plt.plot(time[t1:t2 + 1], data[t1:t2 + 1], c = color)   # create pyplot object
 
         if autotrim and d:
             plt.ylim([self.min[2]-0.2*SCALE,
@@ -872,17 +870,16 @@ class Trace:
         plt.title(f"Trace #{self.trace_number} ({self.step_string})")
         plt.suptitle(self.mouse)
 
-        if paper:
-            fig, axis = plt.subplots()
-            plt.axis('off')
-            mpe.draw_scale_bars(axis, style='paper')
-            if d:
-                plt.show()
-            else:
-                return fig,axis
+        # if paper:
+        #     fig, axis = plt.subplots()
+        #     plt.axis('off')
+
+        #     if d:
+        #         plt.show()
+        #     else:
+        #         return fig,axis
         if d: plt.show()                                            # show if desired
-        else:
-            return plt.subplots()
+       
 
 
     def slope_overlay(self, other = 0, d=True, measures = False):
@@ -915,7 +912,12 @@ class Trace:
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ File Handling ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def load_file(ID: str, filepath: str, fw: (int,int), rev: (int,int), strengths: (int, int), blind = False) -> Raw:
+def load_file(ID: str, 
+              filepath: str, 
+              fw: tuple[int,int], 
+              rev: tuple[int,int], 
+              strengths: tuple[int, int], 
+              blind = False) -> Raw:
     '''
     Extracts relevant channels from raw data file and inserts into Raw object
     Args:
@@ -933,14 +935,19 @@ def load_file(ID: str, filepath: str, fw: (int,int), rev: (int,int), strengths: 
         fw = (1,1)
         rev = (1,1)
         strengths = (1,1)
-        data = Raw(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, strengths, blind = True)
+        data = Raw(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, strengths, blind = True) # type: ignore
         f.close()
         return data
-    data = Raw(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, strengths)
+    data = Raw(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, strengths) # type: ignore
     f.close()
     return data
 
-def load_pickle(ID: str, filepath: str, fw: (int,int), rev: (int,int), strengths: (int, int), blind = False) -> Raw:
+def load_pickle(ID: str, 
+                filepath: str, 
+                fw: tuple[int,int], 
+                rev: tuple[int,int], 
+                strengths: tuple[int, int], 
+                blind = False) -> Raw:
     '''
     Extracts relevant channels from raw data file and inserts into Raw object
     Args:
@@ -958,13 +965,16 @@ def load_pickle(ID: str, filepath: str, fw: (int,int), rev: (int,int), strengths
         fw = (1,1)
         rev = (1,1)
         strengths = (1,1)
-        data = Raw(ID, filepath, pd.read_pickle(f), fw, rev, strengths, blind = True)
-        f.close()
+        data = Raw(ID, filepath, pd.read_pickle(f), fw, rev, strengths, blind = True) # type: ignore
+        
         return data
-    data = Raw(ID, filepath, pd.read_pickle(f), fw, rev, strengths)
+    data = Raw(ID, filepath, pd.read_pickle(f), fw, rev, strengths) # type: ignore
     return data
 
-def batch_from_csv(metapath: str, subID: (str, int, int), mset: list = [], datapath=os.getcwd()) -> {}:
+def batch_from_csv(metapath: str, 
+                   subID: tuple[str, int, int], 
+                   mset: list = [], 
+                   datapath=os.getcwd()) -> dict:
     '''
     Function for running batches of data. Processes and loads data from .csv files into Raw objects for each mouse.
 
@@ -990,8 +1000,8 @@ def batch_from_csv(metapath: str, subID: (str, int, int), mset: list = [], datap
     for i in subID[2:]:
         IDlengths.append(subID[1] + 1 + i)
 
-    animal_IDs, hemis, filenames, fw_stims, fw_responses, rev_stims, rev_responses, strengths = extract_metadata(
-        metapath, IDsubstring, IDlengths)
+    animal_IDs, hemis, filenames, fw_stims, fw_responses, \
+    rev_stims, rev_responses, strengths = extract_metadata(metapath, IDsubstring, IDlengths) # type: ignore
 
     N = len(animal_IDs)
 
@@ -1064,7 +1074,10 @@ def batch_from_csv(metapath: str, subID: (str, int, int), mset: list = [], datap
 
 
 
-def batch_from_pkl(metapath: str, subID: (str, int, int), mset: [], datapath = os.getcwd()) -> {}:
+def batch_from_pkl(metapath: str, 
+                   subID: tuple[str, int, int], 
+                   mset: list, 
+                   datapath = os.getcwd()) -> dict:
     '''
     Function for running batches of data. Should be able to locate the files as long as they are all somewhere in the
     datapath directory. Probably a good idea to narrow down the search at least a bit so it's not searching through
@@ -1087,8 +1100,9 @@ def batch_from_pkl(metapath: str, subID: (str, int, int), mset: [], datapath = o
     for i in subID[2:]:
         IDlengths.append(subID[1]+1+i)
 
+    # extract metadata
     animal_IDs, hemis, filenames, fw_stims, fw_responses, rev_stims, \
-    rev_responses, strengths = extract_metadata(metapath, IDsubstring, IDlengths)   # extract metadata
+    rev_responses, strengths = extract_metadata(metapath, IDsubstring, IDlengths)   # type: ignore
     N = len(animal_IDs)
 
     raw_set = ['']*N                                                # put together animal IDs and hemis to match mset
@@ -1163,7 +1177,7 @@ def batch_from_pkl(metapath: str, subID: (str, int, int), mset: [], datapath = o
     return batch
 
 
-def extract_metadata(metapath: str, IDsubstring: str, IDlengths: ()) -> []:
+def extract_metadata(metapath: str, IDsubstring: str, IDlengths: tuple) -> tuple:
     '''
     Extracts metadata from the directory csv file. Formatting is quite flexible, only requirements are that data is
     arranged in columns, with the mouse IDs (ie. B22R, Y22L, etc.) acting as a header, with labels in the first cell of
@@ -1242,7 +1256,7 @@ def extract_metadata(metapath: str, IDsubstring: str, IDlengths: ()) -> []:
     return (animal_IDs, hemis, filenames, fw_stims, fw_responses, rev_stims, rev_responses, strengths)
 
 
-def batch_to_csv(batch: {}, micro=True, filepath='', subfolder='', append='', order=[], overwrite=False):
+def batch_to_csv(batch: dict, micro=True, filepath='', subfolder='', append='', order=list, overwrite=False):
     '''
     Takes a dictionary of batch data and exports the measures to a .csv
 
@@ -1253,7 +1267,7 @@ def batch_to_csv(batch: {}, micro=True, filepath='', subfolder='', append='', or
         filepath (str): Destination for csv files. Defaults to an empty string, and files will be written to the
                             current working directory (cwd).
         subfolder (str): Name for a subfolder to create for batch csv's. Defaults to none, and all csv's are dumped
-                            into '\Auto_Measures'.
+                            into 'Auto_Measures'.
         append (str): If a filename is provided, the data will be appended to an existing .csv file with the given name.
         order (list): A list containing the mouse IDs in the desired order of appearance in the final .csv file.
                       Defaults to an empty list, and the data is written in the order they appear in the 'batch' dictionary.
@@ -1330,21 +1344,21 @@ def batch_to_csv(batch: {}, micro=True, filepath='', subfolder='', append='', or
             f.close()
 
         # Append the data to the .csv file based on the order provided, if any
-        if len(order) == 0:
+        if len(order) == 0: # type: ignore
             for mouse in dfs:
                 dfs[mouse].to_csv(f"{append}.csv", index=False, encoding="utf-8-sig", mode='a', header=False)
         else:
-            for mouse in order:
+            for mouse in order: # type: ignore
                 dfs[mouse].to_csv(f"{append}.csv", index=False, encoding="utf-8-sig", mode='a', header=False)
 
     else:
         # Create a new folder for storing batch data if 'subfolder' parameter is provided
-        os.makedirs(f'Auto_Measures\\{subfolder}', exist_ok=True)
+        os.makedirs(os.path.join('Auto_Measures',subfolder), exist_ok=True)
 
         # Write each DataFrame into separate .csv files for each mouse
         for mouse in dfs:
             filename = f"{mouse}_Measures.csv"
-            path = f"Auto_Measures\\{subfolder}\\{filename}"
+            path = os.path.join('Auto_Measures',subfolder,filename)
 
             # Raise an exception if the file already exists and overwrite is disabled
             if os.path.exists(path) and not overwrite:
@@ -1360,7 +1374,7 @@ def batch_to_csv(batch: {}, micro=True, filepath='', subfolder='', append='', or
     if filepath != '':
         os.chdir(current_directory)
 
-def stats_to_csv(batch: {}, percentage=False, append='', subfolder='', order=[], filepath='', overwrite=True):
+def stats_to_csv(batch: dict, percentage=False, append='', subfolder='', order=list, filepath='', overwrite=True):
     '''
     Exports the scipy statistical summary for the measures of each mouse in a batch
 
@@ -1378,11 +1392,13 @@ def stats_to_csv(batch: {}, percentage=False, append='', subfolder='', order=[],
                       which they are appended. Should be a list of strings matching the ID string for each mouse.
         filepath (str): This is a string containing the filepath for the directory where you want the .csv's.
                         - DEFAULT -> Empty string, which means it will write to the current working directory.
-                        - USAGE -> A string containing the desired filepath (MAKE SURE TO FORMAT PROPERLY,
-                                   use f"filepath" with double backslash characters ('\\') to ensure Python properly
-                                   interprets the backslash ('\') character. NOTE: using r"filepath" with single backslash
-                                   characters also works, but you CANNOT have a single backslash at the end of a string!!!
-                                   you'll have to do a double backslash at the end and remove the extra one afterwards).
+                        - USAGE -> A string containing the desired filepath (MAKE SURE TO FORMAT PROPERLY, '/' for UNIX or macOS
+                                   and '\\' for windows. 
+                                   FOR WINDOWS:
+                                    Use f"filepath" with double backslash characters ('\\') to ensure Python properly
+                                    interprets the backslash ('\') character. NOTE: using r"filepath" with single backslash
+                                    characters also works, but you CANNOT have a single backslash at the end of a string!!!
+                                    you'll have to do a double backslash at the end and remove the extra one afterwards).
         overwrite (bool): A boolean variable for whether or not to overwrite existing files.
                           - DEFAULT -> True, which means it will overwrite any existing files should a filename conflict arise.
                           - USAGE -> False, which means it will raise an exception should a filename conflict arise.
@@ -1433,22 +1449,22 @@ def stats_to_csv(batch: {}, percentage=False, append='', subfolder='', order=[],
             writer.writerow(column_names)
 
             # Append the stats to the .csv file based on the order provided, if any
-            if len(order) == 0:
+            if len(order) == 0: # type: ignore
                 for mouse in statarrs:
                     for i in statarrs[mouse]:
                         writer.writerow([mouse] + i)
             else:
-                for mouse in order:
+                for mouse in order: # type: ignore
                     for i in statarrs[mouse]:
                         writer.writerow([mouse] + i)
             f.close()
     else:
-        os.makedirs(f'PyStats\\{subfolder}', exist_ok=True)
+        os.makedirs(os.path.join('PyStats',subfolder), exist_ok=True)
 
         # Write each DataFrame into separate .csv files for each mouse
         for mouse in statarrs:
             filename = f"{mouse}_Stats.csv"
-            path = f"PyStats\\{subfolder}\\{filename}"
+            path = os.path.join('PyStats',subfolder,filename)
 
             # Raise an exception if the file already exists and overwrite is disabled
             if os.path.exists(path) and not overwrite:
@@ -1468,7 +1484,7 @@ def stats_to_csv(batch: {}, percentage=False, append='', subfolder='', order=[],
     if filepath != '':
         os.chdir(current_directory)
 
-def display_measures(batch: {}, percentage=False):
+def display_measures(batch: dict, percentage=False):
     '''
     Creates and displays a pyplot figure showing the measures for each mouse in a batch.
 
@@ -1531,96 +1547,4 @@ def plt_resize_text(labelsize=18, titlesize=22):
     ax.title.set_fontsize(titlesize)
 
 
-# ~~ testing ~~ (make sure to update filepaths if you do your own testing!)
-#
-# datapath = r"C:\Users\ramzy\Desktop\Kloef"
-# MIA = r"C:\Users\ramzy\Desktop\Kloef\LTPAnalysis\Directory_2022_SummerMIAPilot.csv"
-# SURE = r"C:\Users\ramzy\Desktop\Kloef\LTPAnalysis\Directory_2022_SURE.csv"
-# batch_MIA = batch_from_pkl(MIA, ('22', 4), mset = ['B22L','B22R_RHS1', 'B22R_LHS2', 'H22L','H22R', 'F22R','F22L', 'C22L'], datapath = datapath)
-# # morder = ['B22L_fw', "B22R_RHS1_fw", "B22L_rev", "B22R_LHS2_fw", "B22R_LHS2_rev", "B22R_RHS1_rev", "H22L_fw", "H22L_rev", "H22R_fw","H22R_rev", "F22L_fw", "F22L_rev", "F22R_fw", "F22R_rev"]
-# # batch_SURE = batch_from_csv(SURE, ('22', 4), mset = ['Y22R', 'X22L'], datapath = datapath)
-# batch_MIA = batch_from_pkl(MIA, ('22', 4), mset = ['C22L'], datapath = datapath)
-# other = batch_from_pkl(MIA, ('22', 4), mset = ['C22L'], datapath = datapath)
-# data1 = batch_MIA['C22R']
-# data2 = batch_MIA['B22R_LHS2']
-# batch_to_csv(batch_MIA, append = 'amp_tweak2', order=morder)
-# batch_to_csv(batch_SURE, subfolder='SURE')
-# display_measures(batch_MIA)
-# data1 = batch_MIA['F22R']
-# data2 = batch_MIA['H22R']
-# data3 = batch_MIA['H22L']
-# batch_to_csv(batch_MIA)
-# data3 = load_file('X22L', datapath+r"\EphysData\20220831_X22R_Raw.csv", (1,1), (1,1), (1,1), blind = True)
-# plt.subplot(1,2,1)
-# data1.get_trace(5).show(d=False, autotrim=True)
-# plt.subplot(1,2,2)
-# data1.get_trace(5).show(d=False, autotrim=True,measures = True)
-# plt.show()
-# print(data1)
-# print(data2)
-# data1.display_traces([5,51,2*data1.fwmin[1]+1, 6, 52,2*data1.revmin[1]], autotrim = True,measures = True)
-
-
-# plt.figure(1)
-# plt.subplot(3,1,1)
-# data1.plot_measure('peakmin',d=False, percentage = True)
-# plt.subplot(3,1,2)
-# data1.plot_measure('rawmin',d=False, percentage = True)
-# plt.subplot(3,1,3)
-# data1.plot_measure('slope', d=False, percentage = True)
-# plt.suptitle(data1.ID)
-# plt.show()
-#
-# plt.figure(2)
-# plt.subplot(3,1,1)
-# data2.plot_measure('peakmin',d=False, percentage = True)
-# plt.subplot(3,1,2)
-# data2.plot_measure('rawmin',d=False, percentage = True)
-# plt.subplot(3,1,3)
-# data2.plot_measure('slope', d=False, percentage = True)
-# plt.suptitle(data2.ID)
-# plt.show()
-#
-# plt.figure(3)
-# plt.subplot(3,1,1)
-# data3.plot_measure('peakmin',d=False, percentage = True)
-# plt.subplot(3,1,2)
-# data3.plot_measure('rawmin',d=False, percentage = True)
-# plt.subplot(3,1,3)
-# data3.plot_measure('slope', d=False, percentage = True)
-# plt.suptitle(data3.ID)
-# plt.show()
-
-
-# data2.display_traces([5,51,2*data2.fwmin[1]+1, 6, 52,2*data2.revmin[1]], autotrim = True, measures = True)
-# data2.plot_measure('min')
-
-# plt.figure(1)
-# data3.display_all(5)
-#
-# plt.figure(2)
-# data3.display_all(6)
-# data2.display_all(5)
-# data2.display_all(6)
-# testtrace = data.get_trace(50)
-# testtrace.show(autotrim=True)
-# testtrace.show(d=False)
-# plt.xlabel("# Bananas")
-# plt.show()
-
-
-# data = batch_data['B22L']
-# x = 100
-# for i in range(x,x + 6):
-#     print(data.fw[i])
-#     plt.subplot(2,3,i-(x-1))
-#     plt.plot(data.fw[i].time[110:500], data.fw[i].data[110:500])
-#     plt.title(str(i))
-# plt.show()
-#
-
-# data = run_batch(metapath, ('22', 4), ['B22R'], datapath)
-# d = data['B22R']
-# print(d)
-# d.display_all(2)
 
