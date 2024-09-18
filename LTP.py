@@ -1696,6 +1696,7 @@ def batch_from_any(metapath: str,
     for i in indices:
         file_exists = False
 
+        # Search for pickles first
         for j in pkls:
             file = pklnames[i]
             if file.lower() in j.lower():
@@ -1707,6 +1708,7 @@ def batch_from_any(metapath: str,
                 file_exists = True
                 break
 
+        # Search for csv if no pickle found
         if not file_exists:
             for j in dir:
                 file = filenames[i]
