@@ -1,10 +1,11 @@
 ######################################################################################################################
 # LTP.py
 # Description: This is a python module for loading and analyzing .csv raw data files obtained using mobius on a MED64
-# rig. It takes in the relevant data and packages it in a Raw object, which includes the basic fEPSP measures. The
-# actual data analysis and figure generation should be done in a command-line, using a separate .py file, or in a
+# rig. It takes in the relevant data and packages it in a LTP class object, which includes the basic fEPSP measures.
+# The actual data analysis and figure generation should be done in a command-line, using a separate .py file, or in a
 # jupyter notebook. For trace viewing, command-line or within a non-notebook IDE is recommended, as jupyter does not
-# produce pyplot graphs in a separate window, which prevents you from using pyplot's zoom/manipulation GUI.
+# produce pyplot graphs in a separate window, which prevents you from using pyplot's zoom/manipulation GUI. The
+# resolution of figures produced in .ipynb's is also generally quite low. 
 ######################################################################################################################
 import os
 import re
@@ -31,6 +32,10 @@ SP = 20                     # period between steps in seconds (SP -> "Step Perio
 NC = 64                     # number of channels (NC -> "Number of Channels")
 SCALE = 1000                # set SCALE = 1 for millivolts, SCALE = 1000 for microvolts
 MU = 'μ'
+BASLINElabel = "Baseline"
+TBSlabel = "Tetanus"        
+LTPlabel = "Early LTP"      # If data was only recorded to 60 minutes post TBS, then it is Early LTP data. 
+                                # If data extends to 90+ minuts post TBS, you have regular LTP. 
 
 TBScolor = "#D73F09"        # figure color scheme
 BASELINEcolor = "#000000"
@@ -40,9 +45,9 @@ MINcolor = "#00859B"
 PEAKcolor = "#AA9D2E"
 FVcolor = "#FFB500"
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Classes ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-class Raw:
+class LTP:
     '''
-    Raw Class:
+    LTP Class:
     This is an object for storing the raw dataset, along with the corresponding metadata (ie. stim channels, stim
     strengths, etc.).
     '''
@@ -56,7 +61,7 @@ class Raw:
                  blind = False,
                  full = False):
         '''
-        Initializer for Raw objects
+        Initializer for LTP objects
         Args:
             ID: mouse identifier (ie. "B22R", "H22L_LHS1")
             filepath: full path to raw data file
@@ -933,9 +938,9 @@ class Trace:
 #               rev: tuple[int,int], 
 #               strengths: tuple[int, int], 
 #               hemi='',
-#               blind = False) -> Raw:
+#               blind = False) -> LTP:
 #     '''
-#     Extracts relevant channels from raw data file and inserts into Raw object
+#     Extracts relevant channels from raw data file and inserts into LTP object
 #     Args:
 #         ID: mouse ID
 #         filepath: filepath for raw data file, file name must be of form "(MOUSE ID)_(Hemisphere/Slice#).csv"
@@ -944,7 +949,7 @@ class Trace:
 #         strengths: Tuple -> (fw stim strength, rev stim strength)
 
 #     Returns:
-#         Raw object containing all of the data from the raw data csv
+#         LTP object containing all of the data from the raw data csv
 #     '''
 #     f = open(filepath, 'r')
 #     if blind:
@@ -952,10 +957,10 @@ class Trace:
 #         rev = (1,1)
 #         strengths = (1,1)
 
-#         data = Raw(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, strengths, blind = True) # type: ignore
+#         data = LTP(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, strengths, blind = True) # type: ignore
 #         f.close()
 #         return data
-#     data = Raw(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, strengths) # type: ignore
+#     data = LTP(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, strengths) # type: ignore
 #     f.close()
 #     return data
 
@@ -964,9 +969,9 @@ class Trace:
 #                 fw: tuple[int,int], 
 #                 rev: tuple[int,int], 
 #                 strengths: tuple[int, int], 
-#                 blind = False) -> Raw:
+#                 blind = False) -> LTP:
 #     '''
-#     Extracts relevant channels from raw data file and inserts into Raw object
+#     Extracts relevant channels from raw data file and inserts into LTP object
 #     Args:
 #         ID: mouse ID
 #         filepath: filepath for pickled dataframe, file name must be of form "MOUSEID.pkl"
@@ -975,17 +980,17 @@ class Trace:
 #         strengths: Tuple -> (fw stim strength, rev stim strength)
 
 #     Returns:
-#         Raw object containing all of the data from the raw data csv
+#         LTP object containing all of the data from the raw data csv
 #     '''
 #     f = filepath
 #     if blind:
 #         fw = (1,1)
 #         rev = (1,1)
 #         strengths = (1,1)
-#         data = Raw(ID, filepath, pd.read_pickle(f), fw, rev, strengths, blind = True) # type: ignore
+#         data = LTP(ID, filepath, pd.read_pickle(f), fw, rev, strengths, blind = True) # type: ignore
         
 #         return data
-#     data = Raw(ID, filepath, pd.read_pickle(f), fw, rev, strengths) # type: ignore
+#     data = LTP(ID, filepath, pd.read_pickle(f), fw, rev, strengths) # type: ignore
 #     return data
 
 # def batch_from_csv(metapath: str, 
@@ -993,7 +998,7 @@ class Trace:
 #                    mset: list = [], 
 #                    datapath=os.getcwd()) -> dict:
 #     '''
-#     Function for running batches of data. Processes and loads data from .csv files into Raw objects for each mouse.
+#     Function for running batches of data. Processes and loads data from .csv files into LTP objects for each mouse.
 
 #     Args:
 #         metapath (str): Filepath to the CSV file with stim and response info for each mouse.
@@ -1006,7 +1011,7 @@ class Trace:
 #         datapath (str): Filepath to the directory containing the raw data .csv's. Defaults to the current working directory.
 
 #     Returns:
-#         dict: A dictionary of Raw objects containing data for each mouse.
+#         dict: A dictionary of LTP objects containing data for each mouse.
 
 #     NOTE: 'mset' defaults to empty, meaning the function will analyze ALL mice in the directory if 'mset' is not specified.
 #     '''
@@ -1074,7 +1079,7 @@ class Trace:
 #                         f"Please ensure there is a .csv raw data file for each mouse in the directory.\n"
 #                         f".xlsx doesn't work!!")
 
-#     # Generate a dictionary of Raw data for each mouse
+#     # Generate a dictionary of LTP data for each mouse
 #     batch = {}
 #     for i in indices:
 #         if using_hemis[indices.index(i)]:
@@ -1082,7 +1087,7 @@ class Trace:
 #         else:
 #             ID = animal_IDs[i]
 
-#         # Load Raw object for each mouse into the batch
+#         # Load LTP object for each mouse into the batch
 #         batch[ID] = load_file(ID, datafiles[ID],
 #                               (fw_stims[i], fw_responses[i]),
 #                               (rev_stims[i], rev_responses[i]),
@@ -1110,7 +1115,7 @@ class Trace:
 #     NOTE: mset defaults to empty, in which case the program will assume you want to analyze ALL mice in the directory!!
 
 #     Returns:
-#         dictionary of Raw objects containing data for each mouse
+#         dictionary of LTP objects containing data for each mouse
 #     '''
 
 #     IDsubstring = subID[0]
@@ -1188,7 +1193,7 @@ class Trace:
 #             ID = raw_set[i]
 #         else:
 #             ID = animal_IDs[i]
-#         batch[ID] = load_pickle(ID, datafiles[ID],                    # load Raw object for each mouse into the batch
+#         batch[ID] = load_pickle(ID, datafiles[ID],                    # load LTP object for each mouse into the batch
 #                               (fw_stims[i], fw_responses[i]),
 #                               (rev_stims[i],rev_responses[i]),
 #                               hemis[i],
@@ -1268,7 +1273,7 @@ class Trace:
 # #             ID = raw_set[i]
 # #         else:
 # #             ID = animal_IDs[i]
-# #         batch[ID] = load_pickle(ID, datafiles[ID],                    # load Raw object for each mouse into the batch
+# #         batch[ID] = load_pickle(ID, datafiles[ID],                    # load LTP object for each mouse into the batch
 # #                               (fw_stims[i], fw_responses[i]),
 # #                               (rev_stims[i],rev_responses[i]),
 # #                               strengths[i])
@@ -1359,9 +1364,9 @@ def load_file(ID: str,
               rev: tuple[int,int], 
               hemi: str,
               strengths: tuple[int, int], 
-              blind = False) -> Raw:
+              blind = False) -> LTP:
     '''
-    Extracts relevant channels from raw data file and inserts into Raw object
+    Extracts relevant channels from raw data file and inserts into LTP object
     Args:
         ID: mouse ID
         filepath: filepath for raw data file, file name must be of form "(MOUSE ID)_(Hemisphere/Slice#).csv"
@@ -1370,17 +1375,17 @@ def load_file(ID: str,
         strengths: Tuple -> (fw stim strength, rev stim strength)
 
     Returns:
-        Raw object containing all of the data from the raw data csv
+        LTP object containing all of the data from the raw data csv
     '''
     f = open(filepath, 'r')
     if blind:
         fw = (1,1)
         rev = (1,1)
         strengths = (1,1)
-        data = Raw(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, hemi, strengths, blind = True) # type: ignore
+        data = LTP(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, hemi, strengths, blind = True) # type: ignore
         f.close()
         return data
-    data = Raw(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, hemi, strengths) # type: ignore
+    data = LTP(ID, filepath, pd.read_csv(f, skiprows=3), fw, rev, hemi, strengths) # type: ignore
     f.close()
     return data
 
@@ -1390,9 +1395,9 @@ def load_pickle(ID: str,
                 rev: tuple[int,int], 
                 hemi: str,
                 strengths: tuple[int, int], 
-                blind = False) -> Raw:
+                blind = False) -> LTP:
     '''
-    Extracts relevant channels from raw data file and inserts into Raw object
+    Extracts relevant channels from raw data file and inserts into LTP object
     Args:
         ID: mouse ID
         filepath: filepath for pickled dataframe, file name must be of form "MOUSEID.pkl"
@@ -1401,17 +1406,17 @@ def load_pickle(ID: str,
         strengths: Tuple -> (fw stim strength, rev stim strength)
 
     Returns:
-        Raw object containing all of the data from the raw data csv
+        LTP object containing all of the data from the raw data csv
     '''
     f = filepath
     if blind:
         fw = (1,1)
         rev = (1,1)
         strengths = (1,1)
-        data = Raw(ID, filepath, pd.read_pickle(f), fw, rev, hemi, strengths, blind = True) # type: ignore
+        data = LTP(ID, filepath, pd.read_pickle(f), fw, rev, hemi, strengths, blind = True) # type: ignore
         
         return data
-    data = Raw(ID, filepath, pd.read_pickle(f), fw, rev, hemi, strengths) # type: ignore
+    data = LTP(ID, filepath, pd.read_pickle(f), fw, rev, hemi, strengths) # type: ignore
     return data
 
 def batch_from_csv(metapath: str, 
@@ -1420,7 +1425,7 @@ def batch_from_csv(metapath: str,
                    datapath=os.getcwd(),
                    pickle_it = False) -> dict:
     '''
-    Function for running batches of data. Processes and loads data from .csv files into Raw objects for each mouse.
+    Function for running batches of data. Processes and loads data from .csv files into LTP objects for each mouse.
 
     Args:
         metapath (str): Filepath to the CSV file with stim and response info for each mouse.
@@ -1433,7 +1438,7 @@ def batch_from_csv(metapath: str,
         datapath (str): Filepath to the directory containing the raw data .csv's. Defaults to the current working directory.
 
     Returns:
-        dict: A dictionary of Raw objects containing data for each mouse.
+        dict: A dictionary of LTP objects containing data for each mouse.
 
     NOTE: 'mset' defaults to empty, meaning the function will analyze ALL mice in the directory if 'mset' is not specified.
     '''
@@ -1501,7 +1506,7 @@ def batch_from_csv(metapath: str,
                         f"Please ensure there is a .csv raw data file for each mouse in the directory.\n"
                         f".xlsx doesn't work!!")
 
-    # Generate a dictionary of Raw data for each mouse
+    # Generate a dictionary of LTP data for each mouse
     batch = {}
     for i in indices:
         if using_hemis[indices.index(i)]:
@@ -1509,7 +1514,7 @@ def batch_from_csv(metapath: str,
         else:
             ID = animal_IDs[i]
 
-        # Load Raw object for each mouse into the batch
+        # Load LTP object for each mouse into the batch
         batch[ID] = load_file(ID, datafiles[ID],
                               (fw_stims[i], fw_responses[i]),
                               (rev_stims[i], rev_responses[i]),
@@ -1539,7 +1544,7 @@ def batch_from_pkl(metapath: str,
     NOTE: mset defaults to empty, in which case the program will assume you want to analyze ALL mice in the directory!!
 
     Returns:
-        dictionary of Raw objects containing data for each mouse
+        dictionary of LTP objects containing data for each mouse
     '''
 
     IDsubstring = subID[0]
@@ -1617,7 +1622,7 @@ def batch_from_pkl(metapath: str,
             ID = raw_set[i]
         else:
             ID = animal_IDs[i]
-        batch[ID] = load_pickle(ID, datafiles[ID],                    # load Raw object for each mouse into the batch
+        batch[ID] = load_pickle(ID, datafiles[ID],                    # load LTP object for each mouse into the batch
                               (fw_stims[i], fw_responses[i]),
                               (rev_stims[i],rev_responses[i]),
                               hemis[i],
@@ -1730,7 +1735,7 @@ def batch_from_any(metapath: str,
                         f"Please ensure there is a .csv raw data file for each mouse in the directory.\n"
                         f".xlsx doesn't work!!")
 
-    # Generate a dictionary of Raw data for each mouse
+    # Generate a dictionary of LTP data for each mouse
     batch = {}
     for i in indices:
         if using_hemis[indices.index(i)]:
@@ -1739,7 +1744,7 @@ def batch_from_any(metapath: str,
             ID = animal_IDs[i]
 
         if 'pkl' in datafiles[ID]:
-            # Load Raw object for each mouse into the batch
+            # Load LTP object for each mouse into the batch
             batch[ID] = load_pickle(ID, datafiles[ID],
                                 (fw_stims[i], fw_responses[i]),
                                 (rev_stims[i], rev_responses[i]),
@@ -1747,7 +1752,7 @@ def batch_from_any(metapath: str,
                                 strengths[i])
         else:
 
-            # Load Raw object for each mouse into the batch
+            # Load LTP object for each mouse into the batch
             batch[ID] = load_file(ID, datafiles[ID],
                                 (fw_stims[i], fw_responses[i]),
                                 (rev_stims[i], rev_responses[i]),
@@ -1842,7 +1847,7 @@ def batch_to_csv(batch: dict, micro=True, filepath='', subfolder='', append='', 
     Takes a dictionary of batch data and exports the measures to a .csv
 
     Args:
-        batch (dict): A dictionary of Raw objects returned by run_batch().
+        batch (dict): A dictionary of LTP objects returned by run_batch().
         micro (bool): Boolean for whether to output units as micro (µV) or milli (mV) units.
                       Defaults to True, so it matches the .modat file units.
         filepath (str): Destination for csv files. Defaults to an empty string, and files will be written to the
@@ -1960,7 +1965,7 @@ def stats_to_csv(batch: dict, percentage=False, append='', subfolder='', order=l
     Exports the scipy statistical summary for the measures of each mouse in a batch
 
     Args:
-        batch (dict): A dictionary containing the Raw class objects for each mouse.
+        batch (dict): A dictionary containing the LTP class objects for each mouse.
         percentage (bool): Determines whether to convert to percentages. Default is False.
         append (str): Determines whether to create and append the stats of each mouse to a single .csv,
                       or if there should be a separate .csv for each mouse.
@@ -2070,7 +2075,7 @@ def display_measures(batch: dict, percentage=False):
     Creates and displays a pyplot figure showing the measures for each mouse in a batch.
 
     Args:
-        batch (dict): A dictionary containing the Raw class objects for each mouse.
+        batch (dict): A dictionary containing the LTP class objects for each mouse.
         percentage (bool): Boolean variable for whether to display measures using percentage or normal units.
                            - If True, measures will be displayed using percentage units.
                            - If False, measures will be displayed using normal units.
