@@ -1,2 +1,5 @@
 __pycache__/
-LTP.ipynb
+*ipynb*
+*png*
+Example_Figures/
+.DS_Store

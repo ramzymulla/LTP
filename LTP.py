@@ -33,7 +33,7 @@ NC = 64                     # number of channels (NC -> "Number of Channels")
 SCALE = 1000                # set SCALE = 1 for millivolts, SCALE = 1000 for microvolts
 MU = 'μ'
 BASLINElabel = "Baseline"
-TBSlabel = "Tetanus"        
+TBSlabel = "Post-Tetanus"        
 LTPlabel = "Early LTP"      # If data was only recorded to 60 minutes post TBS, then it is Early LTP data. 
                                 # If data extends to 90+ minuts post TBS, you have regular LTP. 
 
