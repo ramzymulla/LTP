@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 ######################################################################################################################
 # LTP.py
-# Description: This is a python module for loading and analyzing .csv raw data files obtained the MED64 probe. 
+# Description: This is a python module for loading and analyzing .csv raw data files recorded using the MED64 probe. 
 # It takes in the relevant data and packages it in a LTP class object, which includes the basic fEPSP measures.
 # The actual data analysis and figure generation should be done in the command-line, using a separate script, or in a
 # jupyter notebook (make sure to use '%matplotlib widget' or '%matplotlib notebook' to make high resolution figures). 
