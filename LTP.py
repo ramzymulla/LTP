@@ -17,7 +17,6 @@ import numpy as np
 import scipy as sp
 import csv
 import pickle as pl
-from scipy import stats
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
